@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>垃圾分类挑战 (严格版)</title>
+    <style>
+        /* 基础设置 */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: #f0f4f8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        /* 头部计分板 */
+        header {
+            width: 100%;
+            padding: 15px 20px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.2rem;
+            font-weight: bold;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+
+        .score-box { color: #2c3e50; }
+        .remaining-box { color: #7f8c8d; font-size: 0.9rem; display: flex; align-items: center; }
+
+        /* 游戏主区域 */
+        #game-area {
+            flex: 1;
+            width: 100%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 待分类的垃圾项 */
+        #trash-item {
+            width: 110px;
+            height: 110px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            position: absolute;
+            z-index: 100;
+            transition: transform 0.1s;
+            user-select: none;
+            border: 4px solid white;
+        }
+
+        #trash-item.dragging {
+            transform: scale(1.1);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            cursor: grabbing;
+            z-index: 1000; /* 拖拽时层级最高 */
+        }
+
+        #trash-item .emoji { font-size: 45px; margin-bottom: 5px; }
+        #trash-item .name { font-size: 15px; color: #555; font-weight: bold; pointer-events: none; }
+
+        /* 垃圾桶区域 */
+        #bins-container {
+            width: 100%;
+            height: 180px;
+            display: flex;
+            justify-content: space-around;
+            padding-bottom: 20px;
+            box-sizing: border-box;
+            background: white;
+            border-top: 1px solid #eee;
+        }
+
+        .bin {
+            width: 23%;
+            height: 100%;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            transition: transform 0.2s;
+            position: relative;
+        }
+
+        .bin span { font-size: 32px; margin-bottom: 8px; }
+        .bin div { font-size: 14px; text-align: center; line-height: 1.4; }
+
+        /* 垃圾桶颜色定义 */
+        .bin-wet { background-color: #6c5b4c; border-bottom: 6px solid #504136; }
+        .bin-dry { background-color: #2c3e50; border-bottom: 6px solid #1a252f; }
+        .bin-recycle { background-color: #0056b3; border-bottom: 6px solid #003d80; }
+        .bin-harmful { background-color: #e74c3c; border-bottom: 6px solid #c0392b; }
+
+        .bin.hovered { transform: scale(1.05) translateY(-10px); opacity: 0.9; }
+
+        /* 正确反馈提示 */
+        #feedback {
+            position: absolute;
+            top: 15%;
+            font-size: 4rem;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 200;
+            transition: opacity 0.3s, transform 0.3s;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        /* --- 错误提示红盒子 (新增) --- */
+        #error-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #e74c3c; /* 鲜红色背景 */
+            z-index: 9999; /* 覆盖一切 */
+            display: none; /* 默认隐藏 */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        #error-modal h2 { font-size: 3rem; margin: 0 0 20px 0; text-shadow: 2px 2px 0 rgba(0,0,0,0.2); }
+        #error-modal .error-icon { font-size: 80px; margin-bottom: 20px; }
+        #error-modal .error-desc { font-size: 1.5rem; margin-bottom: 30px; line-height: 1.5; }
+        #error-modal .correct-answer { 
+            background: rgba(0,0,0,0.2); 
+            padding: 10px 20px; 
+            border-radius: 10px; 
+            font-weight: bold;
+            font-size: 1.8rem;
+        }
+        #error-modal .timer { 
+            margin-top: 40px; 
+            font-size: 1rem; 
+            opacity: 0.8;
+            border: 2px solid white;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            border-radius: 50%;
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="score-box">得分: <span id="score">0</span></div>
+    <div class="remaining-box">剩余物品: <span id="remaining-count">0</span></div>
+</header>
+
+<div id="game-area">
+    <div id="feedback"></div>
+    <div id="trash-item">
+        <div class="emoji">🍎</div>
+        <div class="name">苹果核</div>
+    </div>
+</div>
+
+<div id="bins-container">
+    <div class="bin bin-wet" data-type="wet" data-name="湿垃圾">
+        <span>🥬</span>
+        <div>湿垃圾<br>(厨余)</div>
+    </div>
+    <div class="bin bin-dry" data-type="dry" data-name="干垃圾">
+        <span>🧻</span>
+        <div>干垃圾<br>(其他)</div>
+    </div>
+    <div class="bin bin-recycle" data-type="recycle" data-name="可回收物">
+        <span>📦</span>
+        <div>可回收物</div>
+    </div>
+    <div class="bin bin-harmful" data-type="harmful" data-name="有害垃圾">
+        <span>🔋</span>
+        <div>有害垃圾</div>
+    </div>
+</div>
+
+<div id="error-modal">
+    <div class="error-icon">❌</div>
+    <h2>选错了!</h2>
+    <div class="error-desc">
+        <span id="error-item-name">苹果核</span> 其实是：
+    </div>
+    <div class="correct-answer" id="error-correct-bin">湿垃圾</div>
+    <div class="timer" id="countdown">5</div>
+</div>
+
+<script>
+    // 游戏原始数据
+    const masterTrashData = [
+        { name: "苹果核", icon: "🍎", type: "wet" },
+        { name: "剩饭剩菜", icon: "🍛", type: "wet" },
+        { name: "西瓜皮", icon: "🍉", type: "wet" },
+        { name: "鱼骨头", icon: "🐟", type: "wet" },
+        { name: "茶叶渣", icon: "🍵", type: "wet" },
+        { name: "污损纸巾", icon: "🧻", type: "dry" },
+        { name: "烟蒂", icon: "🚬", type: "dry" },
+        { name: "一次性杯", icon: "🥤", type: "dry" },
+        { name: "橡皮泥", icon: "🧶", type: "dry" },
+        { name: "矿泉水瓶", icon: "🧴", type: "recycle" },
+        { name: "易拉罐", icon: "🥫", type: "recycle" },
+        { name: "旧报纸", icon: "📰", type: "recycle" },
+        { name: "快递纸箱", icon: "📦", type: "recycle" },
+        { name: "废电池", icon: "🔋", type: "harmful" },
+        { name: "过期药品", icon: "💊", type: "harmful" },
+        { name: "水银温度计", icon: "🌡️", type: "harmful" },
+        { name: "杀虫剂", icon: "🦟", type: "harmful" }
+    ];
+
+    // 运行时变量
+    let gamePool = []; // 当前轮次的抽题池
+    let currentTrash = null;
+    let score = 0;
+    
+    // DOM 元素
+    const trashElement = document.getElementById('trash-item');
+    const scoreEl = document.getElementById('score');
+    const remainingEl = document.getElementById('remaining-count');
+    const feedbackEl = document.getElementById('feedback');
+    const bins = document.querySelectorAll('.bin');
+    const errorModal = document.getElementById('error-modal');
+    const errorItemName = document.getElementById('error-item-name');
+    const errorCorrectBin = document.getElementById('error-correct-bin');
+    const countdownEl = document.getElementById('countdown');
+
+    // 垃圾桶名称映射
+    const binNames = {
+        'wet': '湿垃圾 (厨余)',
+        'dry': '干垃圾 (其他)',
+        'recycle': '可回收物',
+        'harmful': '有害垃圾'
+    };
+
+    function initGame() {
+        refillPool();
+        spawnTrash();
+        setupEvents();
+    }
+
+    // 填充抽题池并洗牌
+    function refillPool() {
+        // 复制一份完整数据
+        gamePool = JSON.parse(JSON.stringify(masterTrashData));
+        // 随机打乱 (Fisher-Yates Shuffle)
+        for (let i = gamePool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [gamePool[i], gamePool[j]] = [gamePool[j], gamePool[i]];
+        }
+    }
+
+    function spawnTrash() {
+        // 如果池子空了，重新开始一轮
+        if (gamePool.length === 0) {
+            alert("🎉 恭喜！所有物品分类完成！即将开始新的一轮。");
+            refillPool();
+        }
+
+        // 从池子末尾取出一个（不重复的核心逻辑）
+        currentTrash = gamePool.pop();
+        
+        // 更新界面
+        trashElement.querySelector('.emoji').textContent = currentTrash.icon;
+        trashElement.querySelector('.name').textContent = currentTrash.name;
+        remainingEl.textContent = gamePool.length;
+        
+        resetTrashPosition();
+    }
+
+    function resetTrashPosition() {
+        trashElement.style.display = 'flex';
+        trashElement.style.transition = 'transform 0.3s ease-out';
+        trashElement.style.transform = 'translate(0, 0)';
+        trashElement.style.left = '50%';
+        trashElement.style.top = '40%'; // 稍微靠上一点
+        trashElement.style.marginLeft = '-55px';
+        trashElement.style.marginTop = '-55px';
+        
+        setTimeout(() => {
+            trashElement.style.transition = 'none';
+        }, 300);
+    }
+
+    // --- 触摸逻辑 (与之前相同，保持流畅体验) ---
+    let isDragging = false;
+    let startX, startY;
+
+    function setupEvents() {
+        trashElement.addEventListener('touchstart', handleStart, {passive: false});
+        trashElement.addEventListener('touchmove', handleMove, {passive: false});
+        trashElement.addEventListener('touchend', handleEnd);
+        
+        trashElement.addEventListener('mousedown', handleStart);
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleEnd);
+    }
+
+    function handleStart(e) {
+        e.preventDefault();
+        isDragging = true;
+        trashElement.classList.add('dragging');
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const rect = trashElement.getBoundingClientRect();
+        startX = clientX - rect.left;
+        startY = clientY - rect.top;
+    }
+
+    function handleMove(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        trashElement.style.position = 'fixed';
+        trashElement.style.left = (clientX - startX) + 'px';
+        trashElement.style.top = (clientY - startY) + 'px';
+        trashElement.style.margin = 0;
+        trashElement.style.transform = 'scale(1.1)';
+
+        checkCollision(clientX, clientY);
+    }
+
+    function handleEnd(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        trashElement.classList.remove('dragging');
+
+        const rect = trashElement.getBoundingClientRect();
+        const targetBin = getTargetBin(rect.left + rect.width/2, rect.top + rect.height/2);
+
+        if (targetBin) {
+            checkAnswer(targetBin.dataset.type);
+        } else {
+            resetTrashPosition();
+        }
+        bins.forEach(b => b.classList.remove('hovered'));
+    }
+
+    function checkCollision(x, y) {
+        bins.forEach(bin => {
+            const rect = bin.getBoundingClientRect();
+            if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                bin.classList.add('hovered');
+            } else {
+                bin.classList.remove('hovered');
+            }
+        });
+    }
+
+    function getTargetBin(x, y) {
+        let target = null;
+        bins.forEach(bin => {
+            const rect = bin.getBoundingClientRect();
+            if (x >= rect.left && x <= rect.right && y >= rect.top) {
+                target = bin;
+            }
+        });
+        return target;
+    }
+
+    // --- 判定逻辑 (含错误处理) ---
+    function checkAnswer(binType) {
+        if (binType === currentTrash.type) {
+            // 正确
+            score += 10;
+            scoreEl.textContent = score;
+            showFeedback("✅ 正确!", "#2ecc71");
+            if(navigator.vibrate) navigator.vibrate(50);
+            
+            // 隐藏旧的，准备生成新的
+            trashElement.style.display = 'none';
+            setTimeout(() => {
+                spawnTrash();
+            }, 500);
+        } else {
+            // 错误 -> 触发红色格子
+            triggerErrorState();
+        }
+    }
+
+    function showFeedback(text, color) {
+        feedbackEl.textContent = text;
+        feedbackEl.style.color = color;
+        feedbackEl.style.opacity = 1;
+        feedbackEl.style.transform = 'scale(1.2)';
+        setTimeout(() => {
+            feedbackEl.style.opacity = 0;
+            feedbackEl.style.transform = 'scale(1)';
+        }, 1000);
+    }
+
+    // 错误处理逻辑
+    function triggerErrorState() {
+        if(navigator.vibrate) navigator.vibrate(200);
+        
+        // 1. 设置错误信息
+        errorItemName.textContent = currentTrash.name;
+        errorCorrectBin.textContent = binNames[currentTrash.type];
+        
+        // 2. 显示红盒子
+        errorModal.style.display = 'flex';
+        
+        // 3. 倒计时逻辑
+        let timeLeft = 5;
+        countdownEl.textContent = timeLeft;
+        
+        const timer = setInterval(() => {
+            timeLeft--;
+            countdownEl.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                // 时间到，隐藏弹窗，进入下一题
+                errorModal.style.display = 'none';
+                // 错误不加分，直接下一题
+                spawnTrash();
+            }
+        }, 1000);
+    }
+
+    initGame();
+
+</script>
+</body>
+</html>
