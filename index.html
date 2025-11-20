@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>垃圾分类大挑战 (高颜值版)</title>
+    <style>
+        /* --- 1. 全局美化 --- */
+        :root {
+            --bg-color: #fdfbf7;
+            --text-color: #4a4a4a;
+            --card-bg: #ffffff;
+            --wet-color: #8d6e63;
+            --dry-color: #34495e;
+            --recycle-color: #4facfe;
+            --harmful-color: #ff6b6b;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: "PingFang SC", "Rounded Mplus 1c", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-color);
+            /* 可爱的波点背景 (纯CSS绘制) */
+            background-image: radial-gradient(#e0e0e0 2px, transparent 2px);
+            background-size: 24px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+            color: var(--text-color);
+        }
+
+        /* --- 2. 顶部胶囊仪表盘 --- */
+        header {
+            width: 90%;
+            max-width: 600px;
+            margin-top: 20px;
+            padding: 15px 25px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px); /* 磨砂玻璃特效 */
+            border-radius: 50px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.1rem;
+            font-weight: 800;
+            z-index: 10;
+            border: 2px solid #fff;
+        }
+
+        .score-badge { color: #f1c40f; text-shadow: 1px 1px 0 #e67e22; }
+        .count-badge { color: #bdc3c7; }
+
+        /* --- 3. 游戏主舞台 --- */
+        #game-area {
+            flex: 1;
+            width: 100%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 卡片设计 */
+        #trash-item {
+            width: 130px;
+            height: 130px;
+            background: var(--card-bg);
+            border-radius: 25px;
+            /* 双层阴影营造悬浮感 */
+            box-shadow: 
+                0 10px 20px rgba(0,0,0,0.1),
+                0 2px 5px rgba(0,0,0,0.05),
+                inset 0 0 0 4px #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            position: absolute;
+            z-index: 100;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性动画 */
+            user-select: none;
+        }
+
+        #trash-item.dragging {
+            transform: scale(1.15) rotate(8deg);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            cursor: grabbing;
+            z-index: 1000;
+        }
+
+        #trash-item .emoji { font-size: 60px; margin-bottom: 5px; filter: drop-shadow(0 4px 2px rgba(0,0,0,0.1)); }
+        #trash-item .name { font-size: 16px; font-weight: bold; color: #666; background: #f0f2f5; padding: 4px 12px; border-radius: 12px; }
+
+        /* --- 4. 垃圾桶设计 --- */
+        #bins-container {
+            width: 100%;
+            height: 220px;
+            display: flex;
+            justify-content: space-evenly;
+            align-items: flex-end;
+            padding-bottom: 15px;
+            background: linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 100%);
+        }
+
+        .bin {
+            width: 22%;
+            height: 160px; /* 默认高度 */
+            border-radius: 15px 15px 8px 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+            padding-top: 10px;
+        }
+
+        /* 桶盖装饰 */
+        .bin::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            width: 105%;
+            height: 12px;
+            border-radius: 10px;
+            background: inherit;
+            filter: brightness(1.1); /* 比桶身亮一点 */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .bin-wet { background: var(--wet-color); border-bottom: 6px solid #6d4c41; }
+        .bin-dry { background: var(--dry-color); border-bottom: 6px solid #2c3e50; }
+        .bin-recycle { background: var(--recycle-color); border-bottom: 6px solid #2980b9; }
+        .bin-harmful { background: var(--harmful-color); border-bottom: 6px solid #c0392b; }
+
+        /* 悬停时的交互反馈 */
+        .bin.hovered {
+            height: 180px; /* 变高 */
+            transform: translateY(-10px);
+            filter: brightness(1.1);
+        }
+        
+        .bin span { font-size: 36px; margin-bottom: 5px; z-index: 2; filter: drop-shadow(0 2px 0 rgba(0,0,0,0.2));}
+        .bin div { font-size: 13px; text-align: center; line-height: 1.3; opacity: 0.95; z-index: 2; }
+
+        /* --- 5. 反馈 & 惩罚弹窗 --- */
+        
+        /* 正确时的彩带容器 */
+        #confetti-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 998;
+            overflow: hidden;
+        }
+        .confetti {
+            position: absolute;
+            width: 10px; height: 10px;
+            background: #f00;
+            animation: fall linear forwards;
+        }
+        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+        /* 正确文字提示 */
+        #feedback {
+            position: absolute;
+            top: 20%;
+            font-size: 3rem;
+            font-weight: 900;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 999;
+            color: #2ecc71;
+            text-shadow: 0 4px 10px rgba(46, 204, 113, 0.3);
+            transition: all 0.4s;
+            background: rgba(255,255,255,0.9);
+            padding: 10px 30px;
+            border-radius: 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        /* 错误惩罚红屏 */
+        #error-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(231, 76, 60, 0.9);
+            backdrop-filter: blur(8px); /* 高级模糊 */
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            animation: popIn 0.3s;
+        }
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        #error-modal h2 { font-size: 2.5rem; margin: 0; text-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .error-card {
+            background: white;
+            color: #333;
+            padding: 20px 40px;
+            border-radius: 20px;
+            margin: 30px 0;
+            text-align: center;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+        }
+        .correct-tag {
+            display: inline-block;
+            background: #2ecc71;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .timer-ring {
+            width: 60px; height: 60px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .timer-text { animation: none; transform: rotate(0); } /* 让数字不转 */
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="score-badge">🌟 得分: <span id="score">0</span></div>
+    <div class="count-badge">📦 剩余: <span id="remaining-count">0</span></div>
+</header>
+
+<div id="game-area">
+    <div id="confetti-container"></div>
+    <div id="feedback"></div>
+    
+    <div id="trash-item">
+        <div class="emoji">🍎</div>
+        <div class="name">苹果核</div>
+    </div>
+</div>
+
+<div id="bins-container">
+    <div class="bin bin-wet" data-type="wet">
+        <span>🥬</span>
+        <div>湿垃圾<br>(厨余)</div>
+    </div>
+    <div class="bin bin-dry" data-type="dry">
+        <span>🧻</span>
+        <div>干垃圾<br>(其他)</div>
+    </div>
+    <div class="bin bin-recycle" data-type="recycle">
+        <span>🥤</span>
+        <div>可回收物</div>
+    </div>
+    <div class="bin bin-harmful" data-type="harmful">
+        <span>🔋</span>
+        <div>有害垃圾</div>
+    </div>
+</div>
+
+<div id="error-modal">
+    <div style="font-size: 80px;">🙅‍♂️</div>
+    <h2>哎呀，选错了！</h2>
+    <div class="error-card">
+        <div style="font-size: 40px;" id="err-emoji">🍎</div>
+        <div><strong id="err-name">苹果核</strong> 应该扔进</div>
+        <div class="correct-tag" id="err-bin">湿垃圾</div>
+    </div>
+    <div>请记住正确答案</div>
+    <br>
+    <div class="timer-ring">
+        <div class="timer-text" id="countdown">5</div>
+    </div>
+</div>
+
+<script>
+    // --- 1. 数据与配置 ---
+    const masterTrashData = [
+        { name: "苹果核", icon: "🍎", type: "wet" },
+        { name: "剩饭剩菜", icon: "🍛", type: "wet" },
+        { name: "西瓜皮", icon: "🍉", type: "wet" },
+        { name: "鱼骨头", icon: "🐟", type: "wet" },
+        { name: "污损纸巾", icon: "🧻", type: "dry" },
+        { name: "烟蒂", icon: "🚬", type: "dry" },
+        { name: "一次性杯", icon: "🥤", type: "dry" },
+        { name: "破碎陶瓷", icon: "🥣", type: "dry" },
+        { name: "矿泉水瓶", icon: "🧴", type: "recycle" },
+        { name: "易拉罐", icon: "🥫", type: "recycle" },
+        { name: "快递纸箱", icon: "📦", type: "recycle" },
+        { name: "旧书本", icon: "📚", type: "recycle" },
+        { name: "废电池", icon: "🔋", type: "harmful" },
+        { name: "过期药品", icon: "💊", type: "harmful" },
+        { name: "水银温度计", icon: "🌡️", type: "harmful" },
+        { name: "油漆桶", icon: "🖌️", type: "harmful" }
+    ];
+
+    const binNames = {
+        'wet': '湿垃圾 (厨余)',
+        'dry': '干垃圾 (其他)',
+        'recycle': '可回收物',
+        'harmful': '有害垃圾'
+    };
+
+    let gamePool = [];
+    let currentTrash = null;
+    let score = 0;
+    let isLocked = false; // 错误时锁定游戏
+
+    // DOM 引用
+    const trashEl = document.getElementById('trash-item');
+    const scoreEl = document.getElementById('score');
+    const remainEl = document.getElementById('remaining-count');
+    const bins = document.querySelectorAll('.bin');
+    const errorModal = document.getElementById('error-modal');
+    const countdownEl = document.getElementById('countdown');
+    const feedbackEl = document.getElementById('feedback');
+    const confettiContainer = document.getElementById('confetti-container');
+
+    // --- 2. 游戏核心逻辑 ---
+    function initGame() {
+        gamePool = JSON.parse(JSON.stringify(masterTrashData));
+        // 洗牌算法
+        for (let i = gamePool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [gamePool[i], gamePool[j]] = [gamePool[j], gamePool[i]];
+        }
+        score = 0;
+        scoreEl.textContent = 0;
+        spawnTrash();
+    }
+
+    function spawnTrash() {
+        if (gamePool.length === 0) {
+            alert("🎉 太棒了！你完成了所有分类！即将重新开始...");
+            initGame();
+            return;
+        }
+        currentTrash = gamePool.pop();
+        
+        // 更新UI
+        trashEl.querySelector('.emoji').textContent = currentTrash.icon;
+        trashEl.querySelector('.name').textContent = currentTrash.name;
+        remainEl.textContent = gamePool.length;
+        
+        resetPosition();
+    }
+
+    function resetPosition() {
+        trashEl.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        trashEl.style.transform = 'translate(0,0)';
+        trashEl.style.left = '50%';
+        trashEl.style.top = '35%'; // 稍微靠上
+        trashEl.style.marginLeft = '-65px';
+        trashEl.style.marginTop = '-65px';
+        trashEl.style.display = 'flex';
+        trashEl.style.opacity = '1';
+        
+        setTimeout(() => { trashEl.style.transition = 'none'; }, 400);
+    }
+
+    // --- 3. 交互逻辑 (拖拽) ---
+    let isDragging = false;
+    let startX, startY;
+
+    trashEl.addEventListener('touchstart', onDragStart, {passive:false});
+    trashEl.addEventListener('touchmove', onDragMove, {passive:false});
+    trashEl.addEventListener('touchend', onDragEnd);
+    // 鼠标兼容
+    trashEl.addEventListener('mousedown', onDragStart);
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragEnd);
+
+    function onDragStart(e) {
+        if(isLocked) return;
+        e.preventDefault();
+        isDragging = true;
+        trashEl.classList.add('dragging');
+
+        const point = e.touches ? e.touches[0] : e;
+        const rect = trashEl.getBoundingClientRect();
+        startX = point.clientX - rect.left;
+        startY = point.clientY - rect.top;
+    }
+
+    function onDragMove(e) {
+        if(!isDragging || isLocked) return;
+        e.preventDefault();
+        const point = e.touches ? e.touches[0] : e;
+        
+        trashEl.style.position = 'fixed';
+        trashEl.style.left = (point.clientX - startX) + 'px';
+        trashEl.style.top = (point.clientY - startY) + 'px';
+        trashEl.style.margin = 0;
+        
+        checkHover(point.clientX, point.clientY);
+    }
+
+    function onDragEnd(e) {
+        if(!isDragging) return;
+        isDragging = false;
+        trashEl.classList.remove('dragging');
+
+        const rect = trashEl.getBoundingClientRect();
+        const center = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+        
+        const target = getTargetBin(center.x, center.y);
+        
+        if (target) {
+            handleAnswer(target.dataset.type);
+        } else {
+            resetPosition();
+        }
+        bins.forEach(b => b.classList.remove('hovered'));
+    }
+
+    function checkHover(x, y) {
+        bins.forEach(bin => {
+            const r = bin.getBoundingClientRect();
+            if (x > r.left && x < r.right && y > r.top) {
+                bin.classList.add('hovered');
+            } else {
+                bin.classList.remove('hovered');
+            }
+        });
+    }
+
+    function getTargetBin(x, y) {
+        let t = null;
+        bins.forEach(bin => {
+            const r = bin.getBoundingClientRect();
+            // 只要在横向范围内，且高度超过垃圾桶顶部即可
+            if (x > r.left && x < r.right && y > r.top) t = bin;
+        });
+        return t;
+    }
+
+    // --- 4. 判定与特效 ---
+    function handleAnswer(type) {
+        if (type === currentTrash.type) {
+            // 正确
+            score += 10;
+            scoreEl.textContent = score;
+            
+            // 视觉反馈
+            showSuccessEffect();
+            fireConfetti();
+            
+            trashEl.style.opacity = '0';
+            trashEl.style.transform = 'scale(0.5)';
+            
+            setTimeout(spawnTrash, 600);
+        } else {
+            // 错误
+            showErrorModal();
+        }
+    }
+
+    function showSuccessEffect() {
+        feedbackEl.textContent = "✨ 完美! ✨";
+        feedbackEl.style.opacity = 1;
+        feedbackEl.style.transform = 'scale(1.2)';
+        feedbackEl.style.top = '15%';
+        
+        setTimeout(() => {
+            feedbackEl.style.opacity = 0;
+            feedbackEl.style.transform = 'scale(1)';
+            feedbackEl.style.top = '20%';
+        }, 1000);
+    }
+
+    // 纯JS生成简单的彩带特效
+    function fireConfetti() {
+        const colors = ['#e74c3c', '#3498db', '#f1c40f', '#2ecc71', '#9b59b6'];
+        for(let i=0; i<30; i++) {
+            const conf = document.createElement('div');
+            conf.classList.add('confetti');
+            conf.style.background = colors[Math.floor(Math.random()*colors.length)];
+            conf.style.left = (Math.random() * 100) + '%';
+            conf.style.top = '-10px';
+            // 随机大小和速度
+            const dur = Math.random() * 1 + 0.5;
+            conf.style.animationDuration = dur + 's';
+            
+            confettiContainer.appendChild(conf);
+            
+            setTimeout(() => conf.remove(), dur * 1000);
+        }
+    }
+
+    // --- 5. 错误处理 (锁定5秒) ---
+    function showErrorModal() {
+        isLocked = true;
+        
+        // 填充错误信息
+        document.getElementById('err-emoji').textContent = currentTrash.icon;
+        document.getElementById('err-name').textContent = currentTrash.name;
+        document.getElementById('err-bin').textContent = binNames[currentTrash.type];
+        
+        errorModal.style.display = 'flex';
+        
+        let timeLeft = 5;
+        countdownEl.textContent = timeLeft;
+        
+        const timer = setInterval(() => {
+            timeLeft--;
+            countdownEl.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                errorModal.style.display = 'none';
+                isLocked = false;
+                resetPosition(); // 重新给机会扔
+            }
+        }, 1000);
+    }
+
+    // 启动
+    initGame();
+
+</script>
+</body>
+</html>
